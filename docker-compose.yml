@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: gdelt_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gdelt_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gdelt_password}
+      POSTGRES_DB: ${POSTGRES_DB:-gdelt_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+      - ./gdeltDataMerged:/data
+    networks:
+      - gdelt_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gdelt_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: gdelt_streamlit
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-gdelt_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gdelt_password}
+      POSTGRES_DB: ${POSTGRES_DB:-gdelt_db}
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    networks:
+      - gdelt_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  gdelt_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+
