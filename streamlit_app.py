@@ -13,6 +13,8 @@ from plotly.subplots import make_subplots
 import psycopg2
 from datetime import datetime
 from country_codes import get_country_name, get_country_code, COUNTRY_CODES
+from state_change_alert_utils import prepare_timeseries, apply_fit_activity_state, trigger_timeline_state_change
+import matplotlib.pyplot as plt
 
 # Page configuration
 st.set_page_config(
@@ -230,6 +232,40 @@ def get_actor_networks(country, limit=15):
     """
     
     df = pd.read_sql_query(query, conn, params=(country, limit))
+    return df
+
+
+@st.cache_data(ttl=600)
+def get_raw_events_for_state_analysis(country, start_date=None, end_date=None):
+    """Get raw events data for state change analysis."""
+    conn = get_db_connection()
+    if not conn:
+        return pd.DataFrame()
+    
+    query = """
+        SELECT 
+            sqldate,
+            datetime_of_article,
+            nummentions,
+            actiongeocountrycode
+        FROM gdelt_events
+        WHERE actiongeocountrycode = %s
+        AND datetime_of_article IS NOT NULL
+    """
+    params = [country]
+    
+    if start_date and end_date:
+        query += " AND sqldate >= %s AND sqldate <= %s"
+        params.extend([start_date, end_date])
+    
+    query += " ORDER BY datetime_of_article"
+    
+    df = pd.read_sql_query(query, conn, params=tuple(params))
+    
+    if len(df) > 0:
+        # Ensure datetime_of_article is in datetime format
+        df['datetime_of_article'] = pd.to_datetime(df['datetime_of_article'])
+    
     return df
 
 
@@ -452,12 +488,13 @@ def main():
             st.metric("Avg Tone", stats['avg_tone'])
     
     # Tabs for different visualizations
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📈 Timeline",
         "📊 Monthly Trends",
         "🏷️ Categories",
         "🎯 Event Types",
-        "👥 Key Actors"
+        "👥 Key Actors",
+        "🚨 State Change Analysis"
     ])
     
     with tab1:
@@ -535,6 +572,105 @@ def main():
                 st.dataframe(actors_df, use_container_width=True)
         else:
             st.warning("No actor data available.")
+    
+    with tab6:
+        st.subheader("Activity State Change Detection")
+        st.markdown("""
+        This analysis identifies unusual activity patterns by:
+        1. Aggregating events into time windows
+        2. Calculating adaptive state thresholds based on historical data
+        3. Detecting significant state changes that may indicate emerging events
+        """)
+        
+        # Configuration options
+        col1, col2 = st.columns(2)
+        with col1:
+            timescale = st.selectbox(
+                "Time Aggregation",
+                options=['6H', '12H', '1D', '2D'],
+                index=1,
+                help="Aggregate events into time windows"
+            )
+        with col2:
+            min_data_points = st.number_input(
+                "Minimum Data Points",
+                min_value=100,
+                max_value=1000,
+                value=360,
+                step=50,
+                help="Minimum number of data points required for analysis"
+            )
+        
+        if st.button("🔍 Run State Change Analysis", type="primary"):
+            with st.spinner("Loading and analyzing data..."):
+                # Get raw events
+                raw_df = get_raw_events_for_state_analysis(selected_country, start_date, end_date)
+                
+                if raw_df.empty:
+                    st.error("No data available for analysis.")
+                elif len(raw_df) < min_data_points:
+                    st.warning(f"Insufficient data points ({len(raw_df)}). Need at least {min_data_points} for reliable analysis.")
+                else:
+                    # Prepare timeseries
+                    ts_df = prepare_timeseries(raw_df, timescale=timescale)
+                    st.success(f"Prepared timeseries with {len(ts_df)} data points")
+                    
+                    # Apply state change detection
+                    with st.spinner("Applying state change detection algorithm..."):
+                        analyzed_df = apply_fit_activity_state(
+                            ts_df,
+                            start_idx=min(360, len(ts_df) // 3)
+                        )
+                    
+                    st.success("State change analysis complete!")
+                    
+                    # Display statistics
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        alerts_30 = analyzed_df['30 day state change alert'].sum() if '30 day state change alert' in analyzed_df.columns else 0
+                        st.metric("30-Day State Change Alerts", int(alerts_30))
+                    with col2:
+                        alerts_7 = analyzed_df['7 day state change alert'].sum() if '7 day state change alert' in analyzed_df.columns else 0
+                        st.metric("7-Day State Change Alerts", int(alerts_7))
+                    with col3:
+                        current_state = analyzed_df['30 day state'].iloc[-1] if '30 day state' in analyzed_df.columns and len(analyzed_df) > 0 else "Unknown"
+                        st.metric("Current 30-Day State", current_state)
+                    
+                    # Generate and display the matplotlib visualization
+                    st.subheader("State Change Timeline Visualization")
+                    try:
+                        fig = trigger_timeline_state_change(analyzed_df, selected_country_name, timescale=timescale)
+                        st.pyplot(fig)
+                        plt.close(fig)  # Close to free memory
+                    except Exception as e:
+                        st.error(f"Error generating visualization: {str(e)}")
+                    
+                    # Show recent alerts
+                    if '30 day state change alert' in analyzed_df.columns:
+                        recent_alerts = analyzed_df[analyzed_df['30 day state change alert'] == True].tail(10)
+                        if not recent_alerts.empty:
+                            st.subheader("📌 Recent State Change Alerts")
+                            alert_display = recent_alerts[['date', '30 day state', '30 day state index', 'nummentions']].copy()
+                            alert_display.columns = ['Date', 'State', 'State Index', 'Activity Level']
+                            # Format date for better readability
+                            alert_display['Date'] = alert_display['Date'].dt.strftime('%Y-%m-%d %H:%M')
+                            # Reset index to avoid showing row numbers
+                            alert_display = alert_display.reset_index(drop=True)
+                            # Use static table instead of scrollable dataframe
+                            st.table(alert_display)
+                    
+                    # Raw data view
+                    with st.expander("📋 View Processed Data"):
+                        st.dataframe(analyzed_df, use_container_width=True)
+                    
+                    # Download button
+                    csv = analyzed_df.to_csv(index=False)
+                    st.download_button(
+                        label="💾 Download Analysis Results (CSV)",
+                        data=csv,
+                        file_name=f"{selected_country_name}_state_analysis_{timescale}.csv",
+                        mime="text/csv"
+                    )
     
     # Footer
     st.sidebar.markdown("---")

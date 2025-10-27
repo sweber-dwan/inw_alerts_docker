@@ -26,10 +26,16 @@ fi
 
 # Check if docker-compose is available
 echo -e "${YELLOW}Checking Docker Compose...${NC}"
-if command -v docker-compose &> /dev/null; then
-    echo -e "${GREEN}✓ Docker Compose is installed${NC}"
+# Check for Docker Compose v2 (docker compose) or v1 (docker-compose)
+if docker compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker compose"
+    echo -e "${GREEN}✓ Docker Compose v2 is installed${NC}"
+elif command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+    echo -e "${GREEN}✓ Docker Compose v1 is installed${NC}"
 else
     echo -e "${RED}✗ Docker Compose is not installed${NC}"
+    echo -e "${RED}Please install Docker Compose from https://docs.docker.com/compose/install/${NC}"
     exit 1
 fi
 
@@ -51,7 +57,7 @@ echo -e "${CYAN}========================================${NC}"
 echo ""
 
 # Start docker-compose
-docker-compose up -d
+$DOCKER_COMPOSE up -d
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Services started successfully${NC}"
@@ -67,13 +73,13 @@ echo -e "${YELLOW}Waiting for services to be ready...${NC}"
 sleep 15
 
 # Check if containers are healthy
-if docker-compose ps | grep -q "postgres"; then
+if $DOCKER_COMPOSE ps | grep -q "postgres"; then
     echo -e "${GREEN}✓ PostgreSQL is running${NC}"
 else
     echo -e "${YELLOW}⚠ PostgreSQL might still be starting up${NC}"
 fi
 
-if docker-compose ps | grep -q "streamlit"; then
+if $DOCKER_COMPOSE ps | grep -q "streamlit"; then
     echo -e "${GREEN}✓ Streamlit is running${NC}"
 else
     echo -e "${YELLOW}⚠ Streamlit might still be starting up${NC}"
@@ -85,14 +91,38 @@ echo -e "${CYAN}Step 2: Setting up Python Virtual Environment${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 
+# Check if venv exists and is valid
+if [ -d "venv" ] && [ ! -f "venv/bin/activate" ]; then
+    echo -e "${YELLOW}Removing incomplete virtual environment...${NC}"
+    rm -rf venv
+fi
+
 # Create virtual environment
 if [ ! -d "venv" ]; then
     echo -e "${YELLOW}Creating virtual environment...${NC}"
-    python3 -m venv venv
-    if [ $? -eq 0 ]; then
+    
+    # Check if python3-venv is available
+    if ! python3 -m venv --help > /dev/null 2>&1; then
+        echo -e "${RED}✗ python3-venv is not installed${NC}"
+        echo -e "${YELLOW}Please install it with:${NC}"
+        echo -e "  ${GREEN}sudo apt install python3-venv${NC}  (Debian/Ubuntu)"
+        echo -e "  ${GREEN}sudo yum install python3-venv${NC}  (RHEL/CentOS)"
+        echo -e ""
+        echo -e "${YELLOW}Then run this script again.${NC}"
+        exit 1
+    fi
+    
+    python3 -m venv venv 2>&1
+    
+    # Verify venv was created successfully
+    if [ -f "venv/bin/activate" ]; then
         echo -e "${GREEN}✓ Virtual environment created${NC}"
     else
         echo -e "${RED}✗ Failed to create virtual environment${NC}"
+        echo -e "${YELLOW}Please try installing python3-full:${NC}"
+        echo -e "  ${GREEN}sudo apt install python3-full python3-venv${NC}"
+        echo -e ""
+        echo -e "${YELLOW}Then run this script again.${NC}"
         exit 1
     fi
 else
@@ -135,7 +165,7 @@ echo -e "5. To access the database directly:"
 echo -e "   ${GREEN}docker exec -it gdelt_postgres psql -U gdelt_user -d gdelt_db${NC}"
 echo ""
 echo -e "6. To stop all services:"
-echo -e "   ${GREEN}docker-compose down${NC}"
+echo -e "   ${GREEN}docker compose down${NC} (or ${GREEN}docker-compose down${NC} if using v1)"
 echo ""
 echo -e "${YELLOW}Connection Details:${NC}"
 echo ""

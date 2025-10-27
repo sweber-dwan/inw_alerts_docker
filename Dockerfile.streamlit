@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements-streamlit.txt
 # Copy application files
 COPY streamlit_app.py .
 COPY country_codes.py .
+COPY state_change_alert_utils.py .
 
 # Expose Streamlit port
 EXPOSE 8501
