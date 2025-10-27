@@ -16,7 +16,7 @@ echo -e "${CYAN}Push to GitHub Repository${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 
-REPO_URL="https://github.com/sweber-dwan/inw_alerts_docker.git"
+REPO_URL="git@github.com:sweber-dwan/inw_alerts_docker.git"
 
 # Step 1: Check if git is initialized
 echo -e "${YELLOW}Step 1: Checking Git repository...${NC}"
@@ -111,11 +111,12 @@ echo ""
 
 # Step 6: Create commit
 echo -e "${YELLOW}Step 5: Creating commit...${NC}"
-COMMIT_MESSAGE="Initial commit: GDELT PostgreSQL Docker setup with Streamlit dashboard
+COMMIT_MESSAGE="GDELT PostgreSQL Docker setup with Streamlit dashboard and State Change Analysis
 
 Features:
 - PostgreSQL 15 database with GDELT schema
-- Streamlit interactive dashboard
+- Streamlit interactive dashboard with state change detection
+- Activity state analysis with 6-level classification (Very Low to Extreme High)
 - Python data ingestion scripts
 - Docker Compose orchestration
 - Country code mapping for user-friendly UI
@@ -135,15 +136,8 @@ echo ""
 # Step 7: Push to GitHub
 echo -e "${YELLOW}Step 6: Pushing to GitHub...${NC}"
 echo ""
-echo -e "${CYAN}You may be prompted for GitHub authentication:${NC}"
-echo -e "${WHITE}  Username: sweber-dwan${NC}"
-echo -e "${WHITE}  Password: Use a Personal Access Token (not your password)${NC}"
-echo ""
-echo -e "${CYAN}To create a token:${NC}"
-echo -e "${WHITE}  1. Go to: https://github.com/settings/tokens${NC}"
-echo -e "${WHITE}  2. Generate new token (classic)${NC}"
-echo -e "${WHITE}  3. Select 'repo' scope${NC}"
-echo -e "${WHITE}  4. Copy and paste the token when prompted for password${NC}"
+echo -e "${CYAN}Using SSH authentication (no password required)${NC}"
+echo -e "${WHITE}If this is your first time, you may be asked to confirm GitHub's fingerprint.${NC}"
 echo ""
 
 git branch -M main
@@ -172,11 +166,10 @@ else
     echo -e "${RED}========================================${NC}"
     echo ""
     echo -e "${YELLOW}Common issues:${NC}"
-    echo -e "${WHITE}  1. Authentication failed - Use a Personal Access Token${NC}"
+    echo -e "${WHITE}  1. SSH key not added to GitHub - Add at https://github.com/settings/keys${NC}"
     echo -e "${WHITE}  2. No write access - Verify you own the repository${NC}"
     echo -e "${WHITE}  3. Network issue - Check your internet connection${NC}"
     echo ""
     echo -e "${CYAN}For help, see: PUSH_TO_GITHUB.md${NC}"
     echo ""
 fi
-
