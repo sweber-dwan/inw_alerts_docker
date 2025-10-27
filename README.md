@@ -1,6 +1,6 @@
 # GDELT Data PostgreSQL Ingestion & Visualization
 
-This project provides a dockerized PostgreSQL database setup with an interactive Streamlit dashboard for ingesting, analyzing, and visualizing GDELT (Global Database of Events, Language, and Tone) data.
+This project provides a dockerized PostgreSQL database setup with an interactive Streamlit dashboard for ingesting, analyzing, and visualizing GDELT (Global Database of Events, Language, and Tone) data. Features advanced state change detection and anomaly analysis for early warning and crisis monitoring.
 
 ## 📋 Prerequisites
 
@@ -91,11 +91,13 @@ Once data is ingested, open your browser to:
 
 The interactive dashboard provides:
 - **Timeline visualizations** - Event counts and trends over time
+- **State change analysis** - Advanced anomaly detection with 6-level classification
 - **Category analysis** - Distribution of event types
 - **Sentiment tracking** - Goldstein scale and tone metrics
 - **Actor networks** - Key players involved in events
 - **Country filtering** - Focus on specific geographic regions
 - **Date range filters** - Analyze specific time periods
+- **Alert generation** - Automatic detection of significant activity changes
 
 ## 📊 Database Schema
 
@@ -157,6 +159,28 @@ The interactive Streamlit dashboard provides comprehensive data visualization ca
 - Country-based actor analysis
 - Participation frequency charts
 
+#### 🚨 State Change Analysis
+- **Activity state detection** with 6-level classification system
+- **Adaptive thresholds** based on historical data patterns
+- **Automatic alert generation** for significant activity changes
+- **Color-coded timeline** visualization showing state transitions
+- **Extreme event detection** identifying 3x normal activity spikes
+
+**State Levels:**
+- 🟢 **Very Low** - Minimal activity (< 70th percentile)
+- 🟡 **Low** - Below average activity (70-85th percentile)
+- 🟠 **Moderate** - Average activity (85-92nd percentile)
+- 🔴 **High** - Elevated activity (92-98th percentile)
+- 🔴 **Very High** - Significantly elevated activity (> 98th percentile)
+- ⚫ **Extreme High** - Critical activity spike (> 3x Very High threshold)
+
+**Features:**
+- Configurable time aggregation (12H, 1D, 1W)
+- Adaptive threshold calculation using quantile-based analysis
+- Purple star markers indicate state change alerts
+- Historical window analysis (7-day and 30-day states)
+- Export analysis results to CSV
+
 ### Using the Dashboard
 
 1. **Start the services:**
@@ -198,6 +222,102 @@ STREAMLIT_PORT=8080
 - Data is cached for 10 minutes to improve performance
 - Large date ranges may take longer to process
 - Charts are rendered client-side using Plotly for interactivity
+
+## 🚨 State Change Analysis
+
+The State Change Analysis feature provides advanced anomaly detection and activity monitoring for GDELT event data. It uses adaptive thresholds and statistical analysis to identify unusual patterns that may indicate emerging conflicts, crises, or significant events.
+
+### How It Works
+
+1. **Data Aggregation**: Events are aggregated into configurable time windows (12-hour, daily, or weekly)
+
+2. **Threshold Calculation**: The system calculates adaptive thresholds using quantile-based analysis:
+   - Analyzes historical data in rolling windows
+   - Uses 70th, 85th, 92nd, and 98th percentiles
+   - Adjusts thresholds as new data arrives
+
+3. **State Classification**: Each time period is classified into one of six states:
+   - **Very Low** (🟢): All values < 70th percentile
+   - **Low** (🟡): All values < 85th percentile
+   - **Moderate** (🟠): All values < 92nd percentile
+   - **High** (🔴): All values < 98th percentile
+   - **Very High** (🔴): Values exceed 98th percentile
+   - **Extreme High** (⚫): Any value exceeds 3x the 98th percentile threshold
+
+4. **Alert Generation**: Alerts trigger when:
+   - State increases to High, Very High, or Extreme High
+   - Activity level rises from the previous period
+   - Pattern indicates significant deviation from normal
+
+### Using State Change Analysis
+
+1. **Navigate to the "State Change Analysis" tab** in the Streamlit dashboard
+
+2. **Configure Parameters**:
+   - **Time Aggregation**: Choose 12H, 1D, or 1W bins
+   - **Minimum Data Points**: Set threshold (default: 360 for reliable analysis)
+
+3. **Run Analysis**: Click "🔍 Run State Change Analysis"
+
+4. **Interpret Results**:
+   - **Timeline Plot**: Shows activity over time with color-coded state segments
+   - **Purple Stars**: Mark state change alerts (significant increases)
+   - **Metrics**: Display current state and alert counts
+   - **Alert Table**: Lists recent state change events with timestamps
+
+5. **Export Data**: Download analysis results as CSV for further processing
+
+### Color Scheme
+
+The visualization uses an intuitive color gradient:
+```
+🟢 Very Low    → #0fb300 (Green)
+🟡 Low         → #FBFF00 (Yellow)
+🟠 Moderate    → #ff9900 (Orange)
+🔴 High        → #ff0000 (Bright Red)
+🔴 Very High   → #aa0000 (Medium Red)
+⚫ Extreme High → #440000 (Dark Red)
+```
+
+### Technical Details
+
+**Algorithm**: Fit Activity State Detection
+- Uses rolling window analysis (default: 1460 time periods)
+- Expanding window for threshold adaptation (default: 60 periods)
+- Multiple time horizons (7-day and 30-day windows)
+- Extreme value distribution fitting for robust threshold estimation
+
+**Requirements**:
+- Minimum 360 data points recommended for reliable results
+- Events must have `datetime_of_article` timestamps
+- Works with both event counts and mention counts
+
+**Performance**:
+- Analysis completes in seconds for typical datasets
+- Results are cached for 10 minutes
+- Large datasets (>10,000 points) may take longer
+
+### Use Cases
+
+**Conflict Early Warning**:
+- Detect escalation patterns before major incidents
+- Monitor sustained increases in activity
+- Identify geographic hotspots
+
+**Crisis Monitoring**:
+- Track real-time developments during crises
+- Assess event intensity and duration
+- Compare activity to historical baselines
+
+**Trend Analysis**:
+- Identify long-term patterns in event reporting
+- Compare multiple countries or regions
+- Analyze seasonal or cyclical variations
+
+**Research Applications**:
+- Validate event data quality
+- Study media attention cycles
+- Analyze information diffusion patterns
 
 ## 🔍 Accessing the Database
 
@@ -340,23 +460,27 @@ docker exec -it gdelt_postgres psql -U gdelt_user -d gdelt_db
 
 ```
 .
-├── docker-compose.yml          # Docker Compose configuration
-├── Dockerfile.streamlit        # Streamlit container definition
+├── docker-compose.yml             # Docker Compose configuration
+├── Dockerfile.streamlit           # Streamlit container definition
 ├── init-db/
-│   └── 01-create-schema.sql   # Database schema and indexes
-├── gdeltDataMerged/            # GDELT CSV data files
+│   └── 01-create-schema.sql      # Database schema and indexes
+├── gdeltDataMerged/               # GDELT CSV data files
 │   ├── AF.csv
 │   ├── BM.csv
 │   └── ...
-├── streamlit_app.py            # Interactive visualization dashboard
-├── ingest_data.py              # Python ingestion script
-├── query_examples.py           # Example query scripts
-├── requirements.txt            # Python dependencies (ingestion)
-├── requirements-streamlit.txt  # Python dependencies (dashboard)
-├── setup.ps1                   # Windows setup script
-├── setup.sh                    # Linux/Mac setup script
-├── QUICK_START.md              # Quick reference guide
-└── README.md                   # This file
+├── streamlit_app.py               # Interactive visualization dashboard
+├── state_change_alert_utils.py   # State change detection algorithms
+├── country_codes.py               # Country code mappings
+├── ingest_data.py                 # Python ingestion script
+├── query_examples.py              # Example query scripts
+├── requirements.txt               # Python dependencies (ingestion)
+├── requirements-streamlit.txt     # Python dependencies (dashboard)
+├── setup.ps1                      # Windows setup script
+├── setup.sh                       # Linux/Mac setup script
+├── setup-venv.sh                  # Virtual environment setup script
+├── push-to-github.sh              # GitHub deployment script
+├── QUICK_START.md                 # Quick reference guide
+└── README.md                      # This file
 ```
 
 ## 🐛 Troubleshooting
